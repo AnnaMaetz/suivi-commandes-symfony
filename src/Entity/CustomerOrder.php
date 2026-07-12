@@ -15,8 +15,20 @@ class CustomerOrder
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column(length: 12)]
+    #[ORM\Column(length: 12, unique: true)]
     private ?string $trackingCode = null;
+
+    #[ORM\Column(length: 100)]
+    private ?string $customerName = null;
+
+    #[ORM\Column(length: 20)]
+    private ?string $status = null;
+
+    #[ORM\Column]
+    private ?\DateTimeImmutable $createdAt = null;
+
+    #[ORM\Column]
+    private ?\DateTimeImmutable $updatedAt = null;
 
     /**
      * @var Collection<int, OrderStatusHistory>
@@ -27,6 +39,8 @@ class CustomerOrder
     public function __construct()
     {
         $this->orderStatusHistories = new ArrayCollection();
+        $this->createdAt = new \DateTimeImmutable();
+        $this->updatedAt = new \DateTimeImmutable();
     }
 
     public function getId(): ?int
@@ -42,6 +56,54 @@ class CustomerOrder
     public function setTrackingCode(string $trackingCode): static
     {
         $this->trackingCode = $trackingCode;
+
+        return $this;
+    }
+
+    public function getCustomerName(): ?string
+    {
+        return $this->customerName;
+    }
+
+    public function setCustomerName(string $customerName): static
+    {
+        $this->customerName = $customerName;
+
+        return $this;
+    }
+
+    public function getStatus(): ?string
+    {
+        return $this->status;
+    }
+
+    public function setStatus(string $status): static
+    {
+        $this->status = $status;
+
+        return $this;
+    }
+
+    public function getCreatedAt(): ?\DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function setCreatedAt(\DateTimeImmutable $createdAt): static
+    {
+        $this->createdAt = $createdAt;
+
+        return $this;
+    }
+
+    public function getUpdatedAt(): ?\DateTimeImmutable
+    {
+        return $this->updatedAt;
+    }
+
+    public function setUpdatedAt(\DateTimeImmutable $updatedAt): static
+    {
+        $this->updatedAt = $updatedAt;
 
         return $this;
     }
