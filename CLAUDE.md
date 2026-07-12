@@ -24,7 +24,7 @@ Une appli de suivi de commandes/livraisons en temps réel, inspirée du tracking
 - VS Code + terminal intégré PowerShell
 - Symfony CLI installé, `symfony server:start` pour lancer le serveur local
 - Base de données locale : `suivi_commandes`
-- `.env` : `DATABASE_URL="mysql://root:@127.0.0.1:3306/suivi_commandes?serverVersion=8.0"`
+- `.env` : `DATABASE_URL="mysql://root:@127.0.0.1:3306/suivi_commandes?serverVersion=10.4.32-MariaDB"` (⚠️ XAMPP fournit MariaDB, pas MySQL — bien indiquer `serverVersion=...-MariaDB` sinon Doctrine se trompe de moteur)
 
 ## État d'avancement actuel
 
