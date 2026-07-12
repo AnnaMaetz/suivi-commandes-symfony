@@ -1,4 +1,9 @@
 
+###> project custom ###
+/.env
+/CLAUDE.md
+###< project custom ###
+
 ###> symfony/framework-bundle ###
 /.env.local
 /.env.local.php
