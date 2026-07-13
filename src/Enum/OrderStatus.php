@@ -23,4 +23,28 @@ enum OrderStatus: string
             OrderStatus::Delivered => 'Livrée',
         };
     }
+
+    /**
+     * Statut immédiatement suivant dans le cycle de vie,
+     * ou null si le statut est final (Delivered).
+     */
+    public function next(): ?OrderStatus
+    {
+        return match ($this) {
+            OrderStatus::Created => OrderStatus::Preparing,
+            OrderStatus::Preparing => OrderStatus::Shipped,
+            OrderStatus::Shipped => OrderStatus::OutForDelivery,
+            OrderStatus::OutForDelivery => OrderStatus::Delivered,
+            OrderStatus::Delivered => null,
+        };
+    }
+
+    /**
+     * Une commande ne peut avancer que vers son statut immédiatement suivant
+     * (pas de saut d'étape, pas de retour en arrière).
+     */
+    public function canTransitionTo(OrderStatus $target): bool
+    {
+        return $this->next() === $target;
+    }
 }

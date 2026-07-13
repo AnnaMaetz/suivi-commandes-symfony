@@ -75,6 +75,73 @@ class OrderController extends AbstractController
         return $code;
     }
 
+    #[Route('/{id<\d+>}/status', name: 'api_order_update_status', methods: ['PATCH'])]
+    public function updateStatus(int $id, Request $request, EntityManagerInterface $em, CustomerOrderRepository $repo): JsonResponse
+    {
+        $order = $repo->find($id);
+
+        if (!$order) {
+            return $this->json(['error' => 'Commande introuvable'], 404);
+        }
+
+        $data = json_decode($request->getContent(), true);
+
+        if (!is_array($data) || !isset($data['status']) || !is_string($data['status'])) {
+            return $this->json(['error' => 'Le champ "status" est requis.'], 400);
+        }
+
+        // Le statut envoyé correspond-il à une valeur connue de l'enum ?
+        $newStatus = OrderStatus::tryFrom($data['status']);
+
+        if ($newStatus === null) {
+            return $this->json([
+                'error' => 'Statut invalide.',
+                'allowed' => array_map(fn (OrderStatus $s) => $s->value, OrderStatus::cases()),
+            ], 400);
+        }
+
+        // La transition est-elle autorisée (étape suivante uniquement) ?
+        $current = $order->getStatus();
+
+        if (!$current->canTransitionTo($newStatus)) {
+            $next = $current->next();
+
+            return $this->json([
+                'error' => sprintf(
+                    'Transition invalide : une commande "%s" ne peut passer qu\'à "%s".',
+                    $current->value,
+                    $next?->value ?? '(aucun — statut final)',
+                ),
+            ], 422);
+        }
+
+        // Note optionnelle accompagnant le changement de statut
+        $note = isset($data['note']) && is_string($data['note']) ? trim($data['note']) : null;
+        if ($note === '') {
+            $note = null;
+        }
+
+        // Application du changement + nouvelle entrée d'historique
+        $order->setStatus($newStatus);
+        $order->setUpdatedAt(new \DateTimeImmutable());
+
+        $history = new OrderStatusHistory();
+        $history->setStatus($newStatus);
+        $history->setNote($note);
+        $history->setChangedAt(new \DateTimeImmutable());
+        $history->setCustomerOrder($order);
+
+        $em->persist($history);
+        $em->flush();
+
+        return $this->json([
+            'trackingCode' => $order->getTrackingCode(),
+            'customerName' => $order->getCustomerName(),
+            'status' => $order->getStatus()->value,
+            'statusLabel' => $order->getStatus()->label(),
+        ]);
+    }
+
     #[Route('/{trackingCode}', name: 'api_order_show', methods: ['GET'])]
     public function show(string $trackingCode, CustomerOrderRepository $repo): JsonResponse
     {
