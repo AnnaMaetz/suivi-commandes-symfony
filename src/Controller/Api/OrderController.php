@@ -10,6 +10,8 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Mercure\HubInterface;
+use Symfony\Component\Mercure\Update;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/api/orders')]
@@ -76,7 +78,7 @@ class OrderController extends AbstractController
     }
 
     #[Route('/{id<\d+>}/status', name: 'api_order_update_status', methods: ['PATCH'])]
-    public function updateStatus(int $id, Request $request, EntityManagerInterface $em, CustomerOrderRepository $repo): JsonResponse
+    public function updateStatus(int $id, Request $request, EntityManagerInterface $em, CustomerOrderRepository $repo, HubInterface $hub): JsonResponse
     {
         $order = $repo->find($id);
 
@@ -133,6 +135,20 @@ class OrderController extends AbstractController
 
         $em->persist($history);
         $em->flush();
+
+        // Publication de l'event temps réel vers le Hub Mercure.
+        // Le topic "order/{trackingCode}" est le canal auquel le front s'abonnera.
+        $update = new Update(
+            sprintf('order/%s', $order->getTrackingCode()),
+            (string) json_encode([
+                'trackingCode' => $order->getTrackingCode(),
+                'status' => $newStatus->value,
+                'statusLabel' => $newStatus->label(),
+                'changedAt' => $history->getChangedAt()->format(\DateTimeInterface::ATOM),
+            ]),
+        );
+
+        $hub->publish($update);
 
         return $this->json([
             'trackingCode' => $order->getTrackingCode(),
