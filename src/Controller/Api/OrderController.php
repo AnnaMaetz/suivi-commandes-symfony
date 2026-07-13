@@ -22,7 +22,8 @@ class OrderController extends AbstractController
         return $this->json([
             'trackingCode' => $order->getTrackingCode(),
             'customerName' => $order->getCustomerName(),
-            'status' => $order->getStatus(),
+            'status' => $order->getStatus()?->value,
+            'statusLabel' => $order->getStatus()?->label(),
         ]);
     }
 }

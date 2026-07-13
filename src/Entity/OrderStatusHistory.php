@@ -2,6 +2,7 @@
 
 namespace App\Entity;
 
+use App\Enum\OrderStatus;
 use App\Repository\OrderStatusHistoryRepository;
 use Doctrine\ORM\Mapping as ORM;
 
@@ -13,8 +14,8 @@ class OrderStatusHistory
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column(length: 20)]
-    private ?string $status = null;
+    #[ORM\Column(length: 20, enumType: OrderStatus::class)]
+    private ?OrderStatus $status = null;
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $note = null;
@@ -31,12 +32,12 @@ class OrderStatusHistory
         return $this->id;
     }
 
-    public function getStatus(): ?string
+    public function getStatus(): ?OrderStatus
     {
         return $this->status;
     }
 
-    public function setStatus(string $status): static
+    public function setStatus(OrderStatus $status): static
     {
         $this->status = $status;
 
