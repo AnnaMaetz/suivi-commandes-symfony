@@ -1,0 +1,212 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Suivi de commande{% endblock %}
+
+{% block stylesheets %}
+<style>
+    :root {
+        --bg: #f4f6fb;
+        --card: #ffffff;
+        --primary: #4f46e5;
+        --primary-soft: #eef2ff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --line: #e5e7eb;
+        --done: #10b981;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.5;
+    }
+    .wrapper { max-width: 640px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    header h1 { margin: 0 0 .25rem; font-size: 1.8rem; }
+    header p { margin: 0 0 2rem; color: var(--muted); }
+
+    .search {
+        display: flex; gap: .5rem; margin-bottom: 1.5rem;
+    }
+    .search input {
+        flex: 1; padding: .75rem 1rem; font-size: 1rem;
+        border: 1px solid var(--line); border-radius: .6rem; outline: none;
+        text-transform: uppercase;
+    }
+    .search input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+    .search button {
+        padding: .75rem 1.4rem; font-size: 1rem; font-weight: 600;
+        color: #fff; background: var(--primary); border: 0; border-radius: .6rem; cursor: pointer;
+    }
+    .search button:hover { background: #4338ca; }
+
+    .message { padding: 1rem; border-radius: .6rem; background: #fef2f2; color: #b91c1c; display: none; }
+
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 1rem; padding: 1.5rem; display: none; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+    .card.visible { display: block; }
+    .card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: .25rem; }
+    .code { font-family: ui-monospace, monospace; font-size: 1.1rem; font-weight: 700; letter-spacing: .05em; }
+    .live { display: none; align-items: center; gap: .4rem; font-size: .8rem; color: var(--done); font-weight: 600; }
+    .live.on { display: inline-flex; }
+    .live .dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--done); animation: pulse 1.4s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+    .customer { color: var(--muted); margin-bottom: 1.5rem; }
+
+    .timeline { list-style: none; margin: 0; padding: 0; }
+    .step { position: relative; padding: 0 0 1.5rem 2.25rem; }
+    .step:last-child { padding-bottom: 0; }
+    .step::before { /* la ligne verticale */
+        content: ""; position: absolute; left: .58rem; top: 1.35rem; bottom: -.15rem;
+        width: 2px; background: var(--line);
+    }
+    .step:last-child::before { display: none; }
+    .step .marker {
+        position: absolute; left: 0; top: .1rem;
+        width: 1.25rem; height: 1.25rem; border-radius: 50%;
+        border: 2px solid var(--line); background: #fff;
+    }
+    .step .label { font-weight: 600; color: var(--muted); }
+    .step .sub { font-size: .8rem; color: var(--muted); }
+
+    /* étapes déjà franchies */
+    .step.done .marker { background: var(--done); border-color: var(--done); }
+    .step.done::before { background: var(--done); }
+    .step.done .label { color: var(--text); }
+
+    /* étape en cours */
+    .step.current .marker { background: var(--primary); border-color: var(--primary); box-shadow: 0 0 0 4px var(--primary-soft); }
+    .step.current .label { color: var(--primary); }
+
+    .flash { animation: flash 1s ease; }
+    @keyframes flash { 0% { background: var(--primary-soft); } 100% { background: transparent; } }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="wrapper">
+    <header>
+        <h1>📦 Suivi de commande</h1>
+        <p>Entrez votre code de suivi pour voir l'état de votre commande, mis à jour en temps réel.</p>
+    </header>
+
+    <form class="search" id="search-form">
+        <input id="code-input" type="text" placeholder="Ex : 3USGL6LQUQQQ" autocomplete="off" required>
+        <button type="submit">Suivre</button>
+    </form>
+
+    <div class="message" id="message"></div>
+
+    <div class="card" id="card">
+        <div class="card-top">
+            <span class="code" id="out-code"></span>
+            <span class="live" id="live"><span class="dot"></span> En direct</span>
+        </div>
+        <div class="customer" id="out-customer"></div>
+        <ul class="timeline" id="timeline"></ul>
+    </div>
+</div>
+
+<script>
+    // URL publique du Hub Mercure, injectée depuis la config Symfony
+    const MERCURE_URL = {{ mercure_public_url|json_encode|raw }};
+
+    // Les 5 étapes du cycle de vie, dans l'ordre (doit correspondre à l'enum OrderStatus)
+    const STEPS = [
+        { value: 'created',          label: 'Commande créée' },
+        { value: 'preparing',        label: 'En préparation' },
+        { value: 'shipped',          label: 'Expédiée' },
+        { value: 'out_for_delivery', label: 'En cours de livraison' },
+        { value: 'delivered',        label: 'Livrée' },
+    ];
+
+    const form = document.getElementById('search-form');
+    const input = document.getElementById('code-input');
+    const message = document.getElementById('message');
+    const card = document.getElementById('card');
+    const outCode = document.getElementById('out-code');
+    const outCustomer = document.getElementById('out-customer');
+    const timeline = document.getElementById('timeline');
+    const live = document.getElementById('live');
+
+    let eventSource = null; // l'abonnement temps réel en cours
+
+    // Affiche un message d'erreur
+    function showError(text) {
+        message.textContent = text;
+        message.style.display = 'block';
+        card.classList.remove('visible');
+    }
+
+    // Construit / met à jour la timeline en fonction du statut courant
+    function renderTimeline(currentStatus) {
+        const currentIndex = STEPS.findIndex(s => s.value === currentStatus);
+        timeline.innerHTML = '';
+        STEPS.forEach((step, index) => {
+            const li = document.createElement('li');
+            li.className = 'step';
+            if (index < currentIndex) li.classList.add('done');
+            if (index === currentIndex) li.classList.add('current');
+            li.innerHTML =
+                '<span class="marker"></span>' +
+                '<div class="label">' + step.label + '</div>';
+            timeline.appendChild(li);
+        });
+    }
+
+    // Affiche une commande (au chargement initial ou lors d'une mise à jour live)
+    function renderOrder(data, isLiveUpdate) {
+        message.style.display = 'none';
+        outCode.textContent = data.trackingCode;
+        if (data.customerName) outCustomer.textContent = 'Client : ' + data.customerName;
+        renderTimeline(data.status);
+        card.classList.add('visible');
+        if (isLiveUpdate) {
+            card.classList.remove('flash');
+            void card.offsetWidth; // force le redémarrage de l'animation
+            card.classList.add('flash');
+        }
+    }
+
+    // Ouvre un abonnement temps réel au Hub pour ce code de suivi
+    function subscribe(code) {
+        if (eventSource) eventSource.close(); // ferme l'ancien abonnement
+        const url = new URL(MERCURE_URL);
+        url.searchParams.append('topic', 'order/' + code);
+        eventSource = new EventSource(url);
+
+        eventSource.onopen = () => live.classList.add('on');
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            renderOrder(data, true); // true = mise à jour en direct (avec animation)
+        };
+        eventSource.onerror = () => live.classList.remove('on');
+    }
+
+    // Recherche une commande via l'API, puis s'abonne aux mises à jour
+    async function track(code) {
+        try {
+            const res = await fetch('/api/orders/' + encodeURIComponent(code));
+            if (res.status === 404) {
+                showError('Aucune commande trouvée pour le code « ' + code +' ».');
+                return;
+            }
+            if (!res.ok) {
+                showError('Une erreur est survenue. Réessayez plus tard.');
+                return;
+            }
+            const data = await res.json();
+            renderOrder(data, false);
+            subscribe(code); // on écoute les futurs changements de statut
+        } catch (e) {
+            showError('Impossible de contacter le serveur.');
+        }
+    }
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const code = input.value.trim().toUpperCase();
+        if (code) track(code);
+    });
+</script>
+{% endblock %}
